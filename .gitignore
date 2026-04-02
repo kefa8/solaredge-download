@@ -1,0 +1,12 @@
+.venv/
+output/
+notebooks/
+.ruff_cache/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.env
+*.csv

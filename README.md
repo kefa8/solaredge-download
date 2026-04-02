@@ -1,0 +1,83 @@
+# SolarEdge Energy Fetcher
+
+Small Python utility for logging in to SolarEdge Monitoring and downloading
+energy data as CSV. It supports both 15-minute (quarter-hour) data and daily
+aggregates, using Playwright for browser-based authentication.
+
+## Objective
+
+Provide a simple, scriptable way to export SolarEdge production and yield data
+for a site over a date range, without manual UI exports.
+
+## Requirements
+
+- Python 3.11+
+- `uv` (recommended) or a standard Python environment
+- Network access to `monitoring.solaredge.com` and `login.solaredge.com`
+
+## Install
+
+```bash
+uv sync
+uv run playwright install
+```
+
+## Configuration (.env)
+
+Create a `.env` file in the repo root:
+
+```env
+USERNAME=you@example.com
+PASSWORD=your_password
+SITE_ID=1234567
+```
+
+Required:
+
+- `USERNAME`: SolarEdge account email
+- `PASSWORD`: SolarEdge account password
+
+Optional:
+
+- `SITE_ID`: Default site ID if you omit `--site-id`
+
+Never commit `.env` or any downloaded data to git.
+
+## Usage
+
+15-minute (quarter-hour) data:
+
+```bash
+uv run python src/fetch_energy.py --start-date 2026-03-01 --end-date 2026-03-03
+```
+
+Daily aggregates:
+
+```bash
+uv run python src/fetch_energy_daily.py --start-date 2026-03-01 --end-date 2026-03-31
+```
+
+For debugging, run with a visible browser window:
+
+```bash
+uv run python -u src/fetch_energy.py --start-date 2026-03-01 --end-date 2026-03-03 --headed
+```
+
+You can also provide an explicit output path:
+
+```bash
+uv run python src/fetch_energy.py --start-date 2026-03-01 --end-date 2026-03-03 --output output/my_export.csv
+```
+
+Outputs default to `output/` and include `timestamp`, `production`, `yield`, and
+`siteId` columns.
+
+## Notes
+
+- Quarter-hour data is fetched one day at a time (the script enforces this).
+- Daily data can be fetched in larger chunks (defaults to 31 days per request).
+
+## Git Hygiene
+
+This repo ignores `.env`, the `output/` directory, and `*.csv` files by default
+to avoid committing credentials or personal energy data.
