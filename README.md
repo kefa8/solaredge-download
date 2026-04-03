@@ -30,6 +30,7 @@ Create a `.env` file in the repo root:
 USERNAME=you@example.com
 PASSWORD=your_password
 SITE_ID=1234567
+TIMEOUT_SECONDS=30
 ```
 
 Required:
@@ -40,6 +41,7 @@ Required:
 Optional:
 
 - `SITE_ID`: Default site ID if you omit `--site-id`
+- `TIMEOUT_SECONDS`: Request/browser timeout in seconds (default `30`)
 
 Never commit `.env` or any downloaded data to git.
 
@@ -69,6 +71,12 @@ You can also provide an explicit output path:
 uv run python src/fetch_energy.py --start-date 2026-03-01 --end-date 2026-03-03 --output output/my_export.csv
 ```
 
+Disable chunk cache for a run:
+
+```bash
+uv run python src/fetch_energy.py --start-date 2026-03-01 --end-date 2026-03-03 --no-cache
+```
+
 Outputs default to `output/` and include `timestamp`, `production`, `yield`, and
 `siteId` columns.
 
@@ -76,6 +84,9 @@ Outputs default to `output/` and include `timestamp`, `production`, `yield`, and
 
 - Quarter-hour data is fetched one day at a time (the script enforces this).
 - Daily data can be fetched in larger chunks (defaults to 31 days per request).
+- Chunk responses are cached under `output/.cache/` and reused on later runs.
+- Use `--no-cache` to bypass reading and writing chunk cache for a run.
+- Failed chunk requests use exponential backoff and retry up to 3 attempts.
 
 ## Git Hygiene
 

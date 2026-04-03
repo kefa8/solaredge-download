@@ -1,11 +1,39 @@
 import csv
 import datetime as dt
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
 import time
+
+import requests
 
 API_BASE = "https://monitoring.solaredge.com/services/dashboard/energy/sites"
 
 
-def login_playwright(session, username, password, headed=False):
+def get_timeout_seconds(default=30):
+    value = os.getenv("TIMEOUT_SECONDS", str(default))
+    try:
+        timeout_seconds = float(value)
+    except ValueError:
+        print(
+            f"Invalid TIMEOUT_SECONDS={value!r}; using default {default} seconds",
+            file=sys.stderr,
+        )
+        return default
+
+    if timeout_seconds <= 0:
+        print(
+            f"TIMEOUT_SECONDS must be > 0; using default {default} seconds",
+            file=sys.stderr,
+        )
+        return default
+
+    return timeout_seconds
+
+
+def login_playwright(session, username, password, headed=False, timeout_seconds=30):
     try:
         from playwright.sync_api import sync_playwright
     except Exception:
@@ -19,7 +47,7 @@ def login_playwright(session, username, password, headed=False):
             viewport={"width": 1280, "height": 720},
         )
         page = context.new_page()
-        page.set_default_timeout(30000)
+        page.set_default_timeout(int(timeout_seconds * 1000))
         page.goto(
             "https://monitoring.solaredge.com/mfe/auth/", wait_until="domcontentloaded"
         )
@@ -82,3 +110,93 @@ def write_csv(rows, output_path):
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def get_chunk_cache_path(
+    cache_root,
+    site_id,
+    chart_time_unit,
+    start_date,
+    end_date,
+    measurement_types,
+):
+    key = "|".join(
+        [
+            str(site_id),
+            chart_time_unit,
+            start_date,
+            end_date,
+            measurement_types,
+        ]
+    )
+    key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    filename = f"{start_date}_{end_date}_{key_hash}.json"
+    return Path(cache_root) / f"site_{site_id}" / chart_time_unit / filename
+
+
+def load_chunk_cache(
+    cache_root,
+    site_id,
+    chart_time_unit,
+    start_date,
+    end_date,
+    measurement_types,
+):
+    cache_path = get_chunk_cache_path(
+        cache_root,
+        site_id,
+        chart_time_unit,
+        start_date,
+        end_date,
+        measurement_types,
+    )
+    if not cache_path.exists():
+        return None
+
+    try:
+        with cache_path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Ignoring unreadable cache file {cache_path}: {exc}", file=sys.stderr)
+        return None
+
+
+def save_chunk_cache(
+    cache_root,
+    site_id,
+    chart_time_unit,
+    start_date,
+    end_date,
+    measurement_types,
+    payload,
+):
+    cache_path = get_chunk_cache_path(
+        cache_root,
+        site_id,
+        chart_time_unit,
+        start_date,
+        end_date,
+        measurement_types,
+    )
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with cache_path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+
+
+def fetch_with_retries(fetch_fn, max_attempts=3, initial_backoff_seconds=1):
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fetch_fn()
+        except requests.RequestException as exc:
+            if attempt == max_attempts:
+                raise
+
+            backoff_seconds = initial_backoff_seconds * (2 ** (attempt - 1))
+            print(
+                (
+                    f"Request failed (attempt {attempt}/{max_attempts}): {exc}. "
+                    f"Retrying in {backoff_seconds} seconds..."
+                ),
+                file=sys.stderr,
+            )
+            time.sleep(backoff_seconds)

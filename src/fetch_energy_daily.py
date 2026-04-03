@@ -9,13 +9,17 @@ from dotenv import load_dotenv
 from common import (
     API_BASE,
     date_range_chunks,
+    fetch_with_retries,
+    get_timeout_seconds,
+    load_chunk_cache,
     login_playwright,
     parse_date,
+    save_chunk_cache,
     write_csv,
 )
 
 
-def fetch_energy(session, site_id, start_date, end_date):
+def fetch_energy(session, site_id, start_date, end_date, timeout_seconds):
     url = f"{API_BASE}/{site_id}"
     params = {
         "start-date": start_date,
@@ -27,7 +31,7 @@ def fetch_energy(session, site_id, start_date, end_date):
         "Accept": "application/json, text/plain, */*",
         "Referer": "https://monitoring.solaredge.com/one",
     }
-    resp = session.get(url, params=params, headers=headers, timeout=30)
+    resp = session.get(url, params=params, headers=headers, timeout=timeout_seconds)
     resp.raise_for_status()
     return resp.json()
 
@@ -42,10 +46,12 @@ def main():
     parser.add_argument("--chunk-days", type=int, default=31)
     parser.add_argument("--output", default=None)
     parser.add_argument("--headed", action="store_true")
+    parser.add_argument("--no-cache", action="store_true")
     args = parser.parse_args()
 
     username = os.getenv("USERNAME")
     password = os.getenv("PASSWORD")
+    timeout_seconds = get_timeout_seconds()
 
     if not username or not password:
         print("Missing USERNAME or PASSWORD in .env", file=sys.stderr)
@@ -70,8 +76,17 @@ def main():
     )
 
     session = requests.Session()
+    cache_root = Path("output/.cache")
+    chart_time_unit = "days"
+    measurement_types = "production,yield"
     print("Logging in with Playwright...")
-    logged_in = login_playwright(session, username, password, headed=args.headed)
+    logged_in = login_playwright(
+        session,
+        username,
+        password,
+        headed=args.headed,
+        timeout_seconds=timeout_seconds,
+    )
     if not logged_in:
         print("Login failed.", file=sys.stderr)
         return 1
@@ -80,13 +95,54 @@ def main():
     for chunk_start, chunk_end in date_range_chunks(
         start_date, end_date, args.chunk_days
     ):
-        print(f"Fetching {chunk_start.isoformat()} to {chunk_end.isoformat()}...")
-        data = fetch_energy(
-            session,
-            args.site_id,
-            chunk_start.isoformat(),
-            chunk_end.isoformat(),
-        )
+        chunk_start_str = chunk_start.isoformat()
+        chunk_end_str = chunk_end.isoformat()
+        data = None
+        if not args.no_cache:
+            data = load_chunk_cache(
+                cache_root,
+                args.site_id,
+                chart_time_unit,
+                chunk_start_str,
+                chunk_end_str,
+                measurement_types,
+            )
+        if data is None:
+            print(f"Fetching {chunk_start_str} to {chunk_end_str}...")
+            try:
+                data = fetch_with_retries(
+                    lambda: fetch_energy(
+                        session,
+                        args.site_id,
+                        chunk_start_str,
+                        chunk_end_str,
+                        timeout_seconds,
+                    ),
+                    max_attempts=3,
+                )
+            except requests.RequestException as exc:
+                print(
+                    (
+                        f"Failed to fetch {chunk_start_str} to {chunk_end_str} "
+                        f"after 3 attempts: {exc}"
+                    ),
+                    file=sys.stderr,
+                )
+                return 1
+
+            if not args.no_cache:
+                save_chunk_cache(
+                    cache_root,
+                    args.site_id,
+                    chart_time_unit,
+                    chunk_start_str,
+                    chunk_end_str,
+                    measurement_types,
+                    data,
+                )
+        else:
+            print(f"Using cached chunk {chunk_start_str} to {chunk_end_str}...")
+
         measurements = data.get("chart", {}).get("measurements", [])
         for item in measurements:
             rows.append(

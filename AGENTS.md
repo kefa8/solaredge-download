@@ -9,7 +9,6 @@ minimal and focused.
 - `src/fetch_energy.py`: main CLI script (login + data extraction + CSV output).
 - `src/fetch_energy_daily.py`: daily energy variant (daily chart-time-unit).
 - `.env`: credentials (never commit or print).
-- `plan.md`: human notes about the approach.
 
 ## Build / Lint / Test Commands
 There is no build system, no test runner, and no lint/format tooling configured.
