@@ -98,6 +98,8 @@ def build_aggregate(dataframe, group_mode, bucket_mode, years, months, weeks):
         filtered["group_order"] = filtered["week_of_year"]
 
     filtered = filtered.dropna(subset=["production"]).copy()
+    filtered = filtered[filtered["production"] > 0].copy()
+
     if filtered.empty:
         return filtered
 
