@@ -80,6 +80,54 @@ uv run python src/fetch_energy.py --start-date 2026-03-01 --end-date 2026-03-03 
 Outputs default to `output/` and include `timestamp`, `production`, `yield`, and
 `siteId` columns.
 
+## Streamlit App (Time-of-Day Averages)
+
+You can explore historical 15-minute data with a Streamlit UI that charts
+average production by time-of-day in 15-minute or hourly buckets.
+
+![Streamlit chart](images/streamlit_chart.png)
+
+Supported aggregations:
+
+- By month (Jan-Dec)
+- By ISO week of year (1-53)
+
+Set input CSV path in `.env`:
+
+```env
+ENERGY_DATA_FILE=output/energy_1234567_2026-03-01_2026-03-31.csv
+```
+
+Run using `.env` input:
+
+```bash
+uv run streamlit run src/energy_streamlit.py
+```
+
+Or use the helper launcher script:
+
+```bash
+uv run python src/run_energy_app.py
+```
+
+Override input file from CLI:
+
+```bash
+uv run streamlit run src/energy_streamlit.py -- --input output/energy_931241_2019-01-01_2026-04-03.csv
+```
+
+Helper script with explicit input path:
+
+```bash
+uv run python src/run_energy_app.py --input output/energy_931241_2019-01-01_2026-04-03.csv
+```
+
+Input precedence is:
+
+1. `--input`
+2. `ENERGY_DATA_FILE` in `.env`
+3. Latest matching file in `output/energy_*.csv`
+
 ## Notes
 
 - Quarter-hour data is fetched one day at a time (the script enforces this).
