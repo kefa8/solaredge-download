@@ -7,6 +7,11 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
+from common import (
+    week_display_label,
+    year_length,
+)
+
 
 BUCKET_ORDER = [
     f"{hour:02d}:{minute:02d}" for hour in range(24) for minute in (0, 15, 30, 45)
@@ -26,6 +31,7 @@ MONTH_NAMES = [
     "Nov",
     "Dec",
 ]
+REFERENCE_YEAR = 2025
 
 
 def parse_cli_input_path():
@@ -76,8 +82,14 @@ def load_energy_csv(csv_path_str):
     frame["year"] = frame["timestamp"].dt.year.astype(int)
     frame["month_num"] = frame["timestamp"].dt.month.astype(int)
     frame["month_name"] = frame["timestamp"].dt.strftime("%b")
-    frame["week_of_year"] = frame["timestamp"].dt.isocalendar().week.astype(int)
     frame["time_bucket"] = frame["timestamp"].dt.strftime("%H:%M")
+
+    frame["doy"] = frame["timestamp"].dt.day_of_year
+    frame["year_len"] = frame["year"].map(year_length)
+
+    # Fractional position through year (0.0–1.0), then bin into 52 weeks
+    frame["frac"] = (frame["doy"] - 1) / frame["year_len"]
+    frame["week_num"] = (frame["frac"] * 52).astype(int)  # 0–51, perfectly consistent
 
     return frame
 
@@ -91,11 +103,9 @@ def build_aggregate(dataframe, group_mode, bucket_mode, years, months, weeks):
         filtered["group_label"] = filtered["month_name"]
         filtered["group_order"] = filtered["month_num"]
     else:
-        filtered = filtered[filtered["week_of_year"].isin(weeks)].copy()
-        filtered["group_label"] = filtered["week_of_year"].map(
-            lambda value: f"W{value:02d}"
-        )
-        filtered["group_order"] = filtered["week_of_year"]
+        filtered = filtered[filtered["week_num"].isin(weeks)].copy()
+        filtered["group_label"] = filtered["week_num"].map(lambda x: week_display_label(x, REFERENCE_YEAR))
+        filtered["group_order"] = filtered["week_num"]
 
     filtered = filtered.dropna(subset=["production"]).copy()
     filtered = filtered[filtered["production"] > 0].copy()
@@ -182,7 +192,7 @@ def main():
     available_months = [
         month for month in MONTH_NAMES if month in set(data["month_name"].unique())
     ]
-    available_weeks = sorted(data["week_of_year"].unique().tolist())
+    available_weeks = sorted(data["week_num"].unique().tolist())
 
     with st.sidebar:
         st.header("Controls")
@@ -199,7 +209,10 @@ def main():
             selected_weeks = available_weeks
         else:
             selected_weeks = st.multiselect(
-                "ISO weeks", options=available_weeks, default=available_weeks
+                "Weeks",
+                options=available_weeks,
+                default=available_weeks,
+                format_func=week_display_label,
             )
             selected_months = available_months
 
@@ -212,7 +225,7 @@ def main():
         return
 
     if group_mode == "Week of year" and not selected_weeks:
-        st.warning("Select at least one ISO week.")
+        st.warning("Select at least one week.")
         return
 
     aggregated = build_aggregate(
@@ -227,7 +240,7 @@ def main():
     if group_mode == "Month":
         ordered_group_labels = selected_months
     else:
-        ordered_group_labels = [f"W{value:02d}" for value in selected_weeks]
+        ordered_group_labels = [week_display_label(value) for value in selected_weeks]
 
     aggregated["group_label"] = pd.Categorical(
         aggregated["group_label"], categories=ordered_group_labels, ordered=True

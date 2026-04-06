@@ -6,12 +6,30 @@ import os
 from pathlib import Path
 import sys
 import time
+import math
+from datetime import date, timedelta
 
 import requests
 
 API_BASE = "https://monitoring.solaredge.com/services/dashboard/energy/sites"
 
 
+def year_length(year):
+    return 366 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 365
+
+
+def week_num_to_date(week_num, reference_year=2025):
+    """Returns the start date of a given week_num in the reference year."""
+    yr_len = year_length(reference_year)
+    day_of_year = math.floor((week_num / 52) * yr_len) + 1  # 1-indexed
+    return date(reference_year, 1, 1) + timedelta(days=day_of_year - 1)
+
+
+def week_display_label(week_num, reference_year=2025):
+    week_start = week_num_to_date(week_num, reference_year)
+    return f"{week_start.day} {week_start.strftime('%b')}"
+
+    
 def get_timeout_seconds(default=30):
     value = os.getenv("TIMEOUT_SECONDS", str(default))
     try:

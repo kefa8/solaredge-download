@@ -90,7 +90,7 @@ average production by time-of-day in 15-minute or hourly buckets.
 Supported aggregations:
 
 - By month (Jan-Dec)
-- By ISO week of year (1-53)
+- By week of year (1-52)
 
 Set input CSV path in `.env`:
 
@@ -127,6 +127,47 @@ Input precedence is:
 1. `--input`
 2. `ENERGY_DATA_FILE` in `.env`
 3. Latest matching file in `output/energy_*.csv`
+
+## Streamlit App (Daily Average Generation)
+
+You can also explore daily data with a Streamlit UI that charts average daily
+generation as bar charts by month (12 bars) or calendar based week of year (52 bars).
+
+Set daily input CSV path in `.env`:
+
+```env
+ENERGY_DAILY_DATA_FILE=output/energy_daily_1234567_2019-01-01_2026-03-30.csv
+```
+
+Run using `.env` input:
+
+```bash
+uv run streamlit run src/energy_daily_streamlit.py
+```
+
+Or use the helper launcher script:
+
+```bash
+uv run python src/run_energy_daily_app.py
+```
+
+Override input file from CLI:
+
+```bash
+uv run streamlit run src/energy_daily_streamlit.py -- --input output/energy_daily_931241_2019-01-01_2026-03-30.csv
+```
+
+Helper script with explicit input path:
+
+```bash
+uv run python src/run_energy_daily_app.py --input output/energy_daily_931241_2019-01-01_2026-03-30.csv
+```
+
+Daily app input precedence is:
+
+1. `--input`
+2. `ENERGY_DAILY_DATA_FILE` in `.env` (falls back to `ENERGY_DATA_FILE`)
+3. Latest matching file in `output/energy_daily_*.csv`
 
 ## Notes
 
